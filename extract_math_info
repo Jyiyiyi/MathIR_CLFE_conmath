@@ -1,0 +1,84 @@
+import os
+import pymysql
+import re
+import csv
+
+from bs4 import BeautifulSoup
+from tqdm import tqdm
+from math_extractor import MathExtractor
+from distutils.filelist import findall
+
+def remove_attrs(math):
+    pattern = r'\s[a-zA-z]+=".+"'
+    simpleml = re.sub(pattern, '', math.prettify())
+    #print('simpleml:', simpleml)
+    simplemldb = simpleml.replace('\n', '').replace('\r', '').replace(' ', '').replace('\t','')
+    return simplemldb
+#插入数据库
+def InsertData(mathid, latex, simplepmml, simplecmml, context, filemathid):
+    sql = "INSERT INTO ntcir(mathid, latex, pmml, cmml, context, filemathid) VALUES (%s,%s,%s,%s,%s,%s)"
+    data = [(mathid, latex, simplepmml, simplecmml, context, filemathid)]
+    cursor.executemany(sql, data)
+    # 如果没有指定autocommit属性为True的话就需要调用commit()方法
+    conn.commit()
+if __name__ == '__main__':
+    # 连接数据库
+    # server = "."
+    # user = "sa"
+    # password = "123"
+    # database = "mathexpression"
+    # conn = pymssql.connect(server, user, password, database)
+    # cursor = conn.cursor()
+    # print('sucessful')
+    conn = pymysql.connect(host="localhost", user="root", password="123456", database="math_english")
+    #conn = pymysql.connect("localhost", "root", "123", "englishmath")
+    cursor = conn.cursor()
+    print("connection successful!")
+
+
+    filePath = 'F:\\dataset\\NTCIR'
+    name = os.listdir(filePath)
+    print(name)
+    mathid = 0
+    for nname in name:
+        nlink = 'F:\\dataset\\NTCIR\\' + nname + '\\Articles'
+        name1 = os.listdir(nlink)
+        for link in tqdm(name1):
+            print('\n***************************************** file:' + nname+'.'+link+' ****************************************\n')
+            filemath_id = 0
+            colink = nlink + '\\' + link
+            f = open(colink, encoding='utf-8')
+            stre = f.read()
+            soup = BeautifulSoup(stre, "lxml")
+            for math in soup.find_all('math'):
+                extractor = MathExtractor()
+                trees = extractor.math_tokens(str(math))
+                for idx, tree in enumerate(trees):
+                    latex = extractor.isolate_latex(tree)
+                    pmml = extractor.isolate_pmml(tree)
+                    cmml = extractor.isolate_cmml(tree)
+                    simplepmml = remove_attrs(pmml)
+                    simplecmml=remove_attrs(cmml)
+                    #arxiv_formula_id = nname+'.'+link[0:-4] + str(j).zfill(5)
+
+
+                    print('$$$$$$$$$$$$$$$$$$$$$$$$ mathid:' + str(mathid)+' $$$$$$$$$$$$$$$$$$$$$$$')
+                    filemathid = nname+'.'+link[0:-5]+ '.'+ str(filemath_id).zfill(5)
+                    print('filemathid:' + filemathid)
+                    print("latex:" + latex)
+                    # print("cmml:" + str(cmml))
+                    # print("pmml:" + str(pmml))
+                    print("simplepmml:" + simplepmml)
+                    print("simplecmml:" + simplecmml)
+                    #print("pre_text:" + pre_text)
+
+                pre_text, next_text, context = extractor.extract_context(math)
+                print("pre_text:" + pre_text)
+                print("next_text:" + next_text)
+                print('context:' + context)
+                data = [str(mathid), latex, simplepmml, simplecmml, context, filemathid]
+
+                if (0 < len(latex) < 10001) & (0 < len(simplepmml) < 10001) & (0 < len(simplecmml) < 10001) :
+                    InsertData(str(mathid), latex, simplepmml, simplecmml, context, filemathid)
+                    filemath_id = filemath_id + 1
+                    mathid = mathid + 1
